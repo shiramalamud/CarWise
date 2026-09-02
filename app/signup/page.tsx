@@ -20,27 +20,54 @@ export default function SignupPage() {
     setError(null)
 
     const { data: signData, error: signErr } = await supabase.auth.signUp({ email, password })
+
     if (signErr) {
-      setError(signErr.message)
+      // Friendly handling for already-registered email
+      if (signErr.message && /already registered|email.*already|user.*exists/i.test(signErr.message)) {
+        // Check if there's an existing profile record for this email
+        try {
+          const { data: existingProfiles } = await supabase.from('profiles').select().eq('email', email).limit(1)
+          if (existingProfiles && existingProfiles.length > 0) {
+            setError('An account with this email already exists. There is a profile record in the database — if you deleted the Auth user please also delete the profile in the Supabase dashboard before retrying. Otherwise log in or reset your password.')
+          } else {
+            setError('An account with this email already exists. Please log in or reset your password.')
+          }
+        } catch (qErr) {
+          setError('An account with this email already exists. Please log in or reset your password.')
+        }
+      } else {
+        setError(signErr.message)
+      }
       setLoading(false)
       return
     }
 
-    const user = signData.user
-    if (!user) {
-      setError('Please confirm your email (check inbox).')
+    const user = signData?.user
+    // Try to obtain a valid session: either from signUp response or from the client
+    const sessionFromResponse = (signData as any)?.session
+    const { data: sessionData } = await supabase.auth.getSession()
+    const session = sessionFromResponse ?? sessionData?.session
+
+    // If no user or no session, likely email confirmation is required
+    if (!user || !session) {
+      setError('Signup initiated. Please check your email to confirm your account before continuing.')
       setLoading(false)
       return
     }
 
     try {
-      let familyId = null
+      let familyId: string | null = null
       if (mode === 'create') {
         const code = generateFamilyCode()
-        const { data: fam } = await supabase.from('families').insert({ code_family: code }).select().single()
+        // Log session to help debug permission issues (shows whether request is authenticated)
+        // Visible in browser console during signup
+        console.log('supabase session before creating family:', session)
+        const { data: fam, error: famErr } = await supabase.from('families').insert({ code_family: code }).select().single()
+        if (famErr) throw famErr
         familyId = fam.id
       } else {
-        const { data: fams } = await supabase.from('families').select().eq('code_family', joinCode).limit(1)
+        const { data: fams, error: famErr } = await supabase.from('families').select().eq('code_family', joinCode).limit(1)
+        if (famErr) throw famErr
         if (!fams || fams.length === 0) {
           setError('Family code not found')
           setLoading(false)
@@ -49,8 +76,9 @@ export default function SignupPage() {
         familyId = fams[0].id
       }
 
-      // insert profile linked to auth user id
-      await supabase.from('profiles').insert({ id: user.id, id_family: familyId, name_full: name, email })
+      // Upsert profile linked to auth user id (handles retries / existing rows)
+      const { error: profileErr } = await supabase.from('profiles').upsert({ id: user.id, family_id: familyId, full_name: name, email }, { onConflict: 'id' })
+      if (profileErr) throw profileErr
 
       router.replace('/')
     } catch (err: any) {

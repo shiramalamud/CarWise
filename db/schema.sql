@@ -14,8 +14,8 @@ create table if not exists families (
 -- profiles (linked to auth.users via id)
 create table if not exists profiles (
   id uuid primary key,
-  id_family uuid references families(id) on delete set null,
-  name_full text,
+  family_id uuid references families(id) on delete set null,
+  full_name text,
   email text
 );
 
@@ -70,6 +70,7 @@ create table if not exists car_documents (
 
 -- Enable RLS on tables that should be family-scoped
 alter table profiles enable row level security;
+alter table families enable row level security;
 alter table cars enable row level security;
 alter table maintenance_records enable row level security;
 alter table chat_messages enable row level security;
@@ -83,6 +84,17 @@ create policy "profiles_self_manage" on profiles
   for all
   using (id = auth.uid())
   with check (id = auth.uid());
+
+-- families: allow authenticated users to create a new family and to look up by code
+create policy "families_select_authenticated" on families
+  for select
+  to authenticated
+  using (true);
+
+create policy "families_insert_authenticated" on families
+  for insert
+  to authenticated
+  with check (true);
 
 -- cars: allow access if car.id_family = current_setting('jwt.claims.family_id')::uuid
 create policy "cars_family_policy" on cars
