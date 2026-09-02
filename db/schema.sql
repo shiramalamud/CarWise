@@ -97,42 +97,43 @@ create policy "families_insert_authenticated" on families
   with check (true);
 
 -- cars: allow access if car.id_family = current_setting('jwt.claims.family_id')::uuid
+-- cars: allow access if car.id_family matches the profile's family_id
 create policy "cars_family_policy" on cars
   for all
-  using (id_family = current_setting('jwt.claims.family_id')::uuid)
-  with check (id_family = current_setting('jwt.claims.family_id')::uuid);
+  using (id_family = (select family_id from profiles where id = auth.uid()))
+  with check (id_family = (select family_id from profiles where id = auth.uid()));
 
 -- maintenance_records: join through cars
 create policy "records_family_policy" on maintenance_records
   for all
   using (
     exists (
-      select 1 from cars where cars.id = maintenance_records.car_id and cars.id_family = current_setting('jwt.claims.family_id')::uuid
+      select 1 from cars where cars.id = maintenance_records.car_id and cars.id_family = (select family_id from profiles where id = auth.uid())
     )
   )
   with check (
     exists (
-      select 1 from cars where cars.id = maintenance_records.car_id and cars.id_family = current_setting('jwt.claims.family_id')::uuid
+      select 1 from cars where cars.id = maintenance_records.car_id and cars.id_family = (select family_id from profiles where id = auth.uid())
     )
   );
 
 -- chat_messages: scoped by id_family column
 create policy "messages_family_policy" on chat_messages
   for all
-  using (id_family = current_setting('jwt.claims.family_id')::uuid)
-  with check (id_family = current_setting('jwt.claims.family_id')::uuid);
+  using (id_family = (select family_id from profiles where id = auth.uid()))
+  with check (id_family = (select family_id from profiles where id = auth.uid()));
 
 -- car_documents: verify via cars
 create policy "documents_family_policy" on car_documents
   for all
   using (
     exists (
-      select 1 from cars where cars.id = car_documents.car_id and cars.id_family = current_setting('jwt.claims.family_id')::uuid
+      select 1 from cars where cars.id = car_documents.car_id and cars.id_family = (select family_id from profiles where id = auth.uid())
     )
   )
   with check (
     exists (
-      select 1 from cars where cars.id = car_documents.car_id and cars.id_family = current_setting('jwt.claims.family_id')::uuid
+      select 1 from cars where cars.id = car_documents.car_id and cars.id_family = (select family_id from profiles where id = auth.uid())
     )
   );
 

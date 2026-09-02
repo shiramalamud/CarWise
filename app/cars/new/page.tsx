@@ -25,7 +25,20 @@ export default function NewCarPage() {
         mileage: Number(form.mileage),
       } as CarInput)
 
+      // Ensure we have the current user's family_id from profiles
+      const { data: userData } = await supabase.auth.getUser()
+      const userId = userData?.user?.id
+      if (!userId) throw new Error('Not authenticated')
+
+      const { data: profileData, error: profileErr } = await supabase.from('profiles').select('family_id').eq('id', userId).single()
+      if (profileErr) throw profileErr
+      const familyId = profileData?.family_id
+
+      // Log family_id being sent to help debug RLS errors (visible in browser console)
+      console.log('creating car with family_id:', familyId)
+
       const { data, error } = await supabase.from('cars').insert({
+        id_family: familyId,
         make: parsed.make,
         model: parsed.model,
         year: parsed.year,
