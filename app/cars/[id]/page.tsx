@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '../../../lib/supabaseClient'
 import { carSchema, CarInput } from '../../../lib/validators/car'
 import { maintenanceSchema, MaintenanceInput } from '../../../lib/validators/maintenance'
+import WarningLightUploader from '../../../components/WarningLightUploader'
 
 export default function CarDetailPage() {
   const params = useParams()
@@ -277,6 +278,10 @@ export default function CarDetailPage() {
           ))}
           {records.length === 0 && <div className="text-sm text-slate-600">No maintenance records yet.</div>}
         </div>
+      </section>
+
+      <section className="p-4 max-w-lg">
+        <WarningLightUploader carId={id} />
       </section>
     </main>
   )
