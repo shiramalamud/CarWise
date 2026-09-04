@@ -15,6 +15,13 @@ export default function CarDetailPage() {
   const [form, setForm] = useState({ make: '', model: '', year: '', plate_license: '', mileage: '', last_service_date: '', test_expiry_date: '', insurance_expiry_date: '' })
   const [errors, setErrors] = useState<Record<string,string>>({})
   const [records, setRecords] = useState<any[]>([])
+  const [documents, setDocuments] = useState<any[]>([])
+  const [docType, setDocType] = useState('insurance')
+  const [docFile, setDocFile] = useState<File | null>(null)
+  const [docExpiry, setDocExpiry] = useState('')
+  const [docUploading, setDocUploading] = useState(false)
+  const [showDocForm, setShowDocForm] = useState(false)
+  const [showWarningUploader, setShowWarningUploader] = useState(false)
   const [recordForm, setRecordForm] = useState({ id: '', type: '', date: '', name_garage: '', cost: '', notes: '' })
   const [recordLoading, setRecordLoading] = useState(false)
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null)
@@ -43,6 +50,10 @@ export default function CarDetailPage() {
         const { data: recs, error: recErr } = await supabase.from('maintenance_records').select('*').eq('car_id', id).order('date', { ascending: false })
         if (recErr) console.error(recErr)
         else setRecords(recs || [])
+        // load documents
+        const { data: docs, error: docsErr } = await supabase.from('car_documents').select('*').eq('car_id', id).order('at_uploaded', { ascending: false })
+        if (docsErr) console.error(docsErr)
+        else setDocuments(docs || [])
       }
       setLoading(false)
     }
@@ -281,7 +292,136 @@ export default function CarDetailPage() {
       </section>
 
       <section className="p-4 max-w-lg">
-        <WarningLightUploader carId={id} />
+        <h3 className="text-md font-semibold">Analyze Warning Light</h3>
+        <p className="text-sm text-slate-600">Upload a photo of the dashboard warning light for AI analysis.</p>
+        <div className="mt-3">
+          <button onClick={() => setShowWarningUploader(s => !s)} className="px-3 py-1 bg-sky-600 text-white rounded">{showWarningUploader ? 'Close' : 'Analyze Warning Light'}</button>
+        </div>
+        {showWarningUploader && (
+          <div className="mt-3">
+            <WarningLightUploader carId={id} />
+          </div>
+        )}
+      </section>
+
+      <section className="p-4 max-w-lg mt-6 bg-white rounded shadow">
+        <h3 className="text-md font-semibold">Car Documents</h3>
+        <p className="text-sm text-slate-600">Upload official documents (license, insurance, approvals).</p>
+
+        <div className="mt-3">
+          <button onClick={() => setShowDocForm(s => !s)} className="px-3 py-1 bg-sky-600 text-white rounded">
+            {showDocForm ? 'Close form' : 'Add Document'}
+          </button>
+
+          {showDocForm && (
+            <div className="mt-3">
+              <label className="block mb-2">Document type
+                <select value={docType} onChange={e => setDocType(e.target.value)} className="w-full mt-1 p-2 border rounded">
+                  <option value="insurance">Insurance</option>
+                  <option value="license">License</option>
+                  <option value="approval">Approval</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+
+              <label className="block mb-2">Expiry date (optional)
+                <input type="date" value={docExpiry} onChange={e => setDocExpiry(e.target.value)} className="w-full mt-1 p-2 border rounded" />
+              </label>
+
+              <label className="block mb-2">File
+                <input type="file" onChange={e => setDocFile(e.target.files?.[0] || null)} className="w-full mt-1" />
+              </label>
+
+              <div className="mt-2">
+                <button onClick={async () => {
+                  if (!docFile) return alert('Select a file')
+                  setDocUploading(true)
+                  try {
+                    const bucket = 'car-documents'
+                    // sanitize filename: use timestamp + UUID + original extension only
+                    const extMatch = docFile.name.match(/\.([a-zA-Z0-9]+)$/)
+                    const ext = extMatch ? extMatch[1] : ''
+                    const uid = (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') ? globalThis.crypto.randomUUID() : Math.random().toString(36).slice(2)
+                    const filename = `${Date.now()}_${uid}${ext ? `.${ext}` : ''}`
+                    const path = `${id}/${filename}`
+                    // upload
+                    const { data: upData, error: upErr } = await supabase.storage.from(bucket).upload(path, docFile, { cacheControl: '3600', upsert: false })
+                    if (upErr) throw upErr
+                    // create signed URL
+                    const { data: urlData, error: urlErr } = await supabase.storage.from(bucket).createSignedUrl(path, 60)
+                    if (urlErr) console.warn('createSignedUrl failed', urlErr)
+
+                    const fileUrl = urlData?.signedUrl || `${bucket}/${path}`
+                    // insert record
+                    const { error: insErr } = await supabase.from('car_documents').insert({ car_id: id, document_type: docType, expiry_date: docExpiry || null, file_url: path })
+                    if (insErr) throw insErr
+                    // reload documents
+                    const { data: docs, error: docsErr } = await supabase.from('car_documents').select('*').eq('car_id', id).order('at_uploaded', { ascending: false })
+                    if (docsErr) throw docsErr
+                    setDocuments(docs || [])
+                    setDocFile(null)
+                    setDocExpiry('')
+                    setDocType('insurance')
+                    setShowDocForm(false)
+                    alert('Uploaded')
+                  } catch (err: any) {
+                    console.error('Upload error', err)
+                    alert('Upload failed: ' + (err.message || String(err)))
+                  } finally {
+                    setDocUploading(false)
+                  }
+                }} className="px-3 py-1 bg-green-600 text-white rounded" disabled={docUploading}>{docUploading ? 'Uploading...' : 'Upload Document'}</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <h4 className="font-medium">Uploaded documents</h4>
+          <div className="space-y-2 mt-2">
+            {documents.map(d => (
+              <div key={d.id} className="p-2 border rounded flex items-center justify-between">
+                <div>
+                  <div className="font-semibold">{d.document_type}</div>
+                  <div className="text-sm text-slate-600">Uploaded: {new Date(d.at_uploaded).toLocaleString()}</div>
+                  {d.expiry_date && <div className="text-sm text-slate-600">Expiry: {d.expiry_date}</div>}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={async () => {
+                    try {
+                      const bucket = 'car-documents'
+                      const path = d.file_url
+                      const { data: urlData, error: urlErr } = await supabase.storage.from(bucket).createSignedUrl(path, 60)
+                      if (urlErr) throw urlErr
+                      const url = urlData.signedUrl
+                      window.open(url, '_blank')
+                    } catch (err: any) {
+                      console.error('Download error', err)
+                      alert('Download failed: ' + (err.message || String(err)))
+                    }
+                  }} className="px-2 py-1 bg-blue-600 text-white rounded">Download</button>
+
+                  <button onClick={async () => {
+                    if (!confirm('Delete this document?')) return
+                    try {
+                      const bucket = 'car-documents'
+                      const path = d.file_url
+                      const { error: delErr } = await supabase.storage.from(bucket).remove([path])
+                      if (delErr) throw delErr
+                      const { error: dbErr } = await supabase.from('car_documents').delete().eq('id', d.id)
+                      if (dbErr) throw dbErr
+                      setDocuments(prev => prev.filter(x => x.id !== d.id))
+                    } catch (err: any) {
+                      console.error('Delete doc error', err)
+                      alert('Delete failed: ' + (err.message || String(err)))
+                    }
+                  }} className="px-2 py-1 bg-red-600 text-white rounded">Delete</button>
+                </div>
+              </div>
+            ))}
+            {documents.length === 0 && <div className="text-sm text-slate-600">No documents uploaded.</div>}
+          </div>
+        </div>
       </section>
     </main>
   )
