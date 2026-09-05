@@ -1,5 +1,12 @@
 "use client"
 import React, { useState } from 'react'
+import { Badge } from './ui'
+
+const URGENCY_COLOR: Record<string, 'green' | 'yellow' | 'red'> = {
+  low: 'green',
+  medium: 'yellow',
+  high: 'red',
+}
 
 export default function WarningLightUploader({ carId }: { carId: string }) {
   const [file, setFile] = useState<File | null>(null)
@@ -38,7 +45,7 @@ export default function WarningLightUploader({ carId }: { carId: string }) {
       <form onSubmit={onSubmit}>
         <input type="file" accept="image/*" onChange={e => setFile(e.target.files ? e.target.files[0] : null)} />
         <div className="mt-2 flex gap-2">
-          <button className="px-3 py-1 bg-sky-600 text-white rounded" disabled={loading}>{loading ? 'Analyzing...' : 'Upload & Analyze'}</button>
+          <button className="px-3 py-1 bg-teal-600 hover:bg-teal-500 text-white rounded transition-colors" disabled={loading}>{loading ? 'Analyzing...' : 'Upload & Analyze'}</button>
         </div>
       </form>
 
@@ -46,8 +53,15 @@ export default function WarningLightUploader({ carId }: { carId: string }) {
 
       {result && (
         <div className="mt-3 p-3 bg-gray-50 rounded">
-          <div><strong>Label:</strong> {result.label}</div>
-          <div><strong>Urgency:</strong> {result.urgency}</div>
+          <div className="flex items-center gap-2">
+            <strong>Label:</strong> {result.label}
+          </div>
+          <div className="mt-1 flex items-center gap-2">
+            <strong>Urgency:</strong>
+            <Badge color={URGENCY_COLOR[String(result.urgency).toLowerCase()] || 'yellow'}>
+              {String(result.urgency).charAt(0).toUpperCase() + String(result.urgency).slice(1)}
+            </Badge>
+          </div>
           <div className="mt-2"><strong>Explanation:</strong><div className="mt-1">{result.explanation}</div></div>
         </div>
       )}

@@ -9,32 +9,48 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [isPublic, setIsPublic] = useState(false)
+  const [authed, setAuthed] = useState(false)
 
   useEffect(() => {
-    const check = async () => {
       const publicPaths = ['/login', '/signup', '/_next', '/api']
-      if (publicPaths.some(p => pathname?.startsWith(p))) {
-        setIsPublic(true)
-        setLoading(false)
-        return
-      }
+      const onPublicPath = publicPaths.some(p => pathname?.startsWith(p))
+      // '/' renders its own splash (logged-out) vs dashboard (logged-in) UI,
+      // so it should never be force-redirected to /login
+      const onSoftPath = pathname === '/'
 
-      const { data } = await supabase.auth.getSession()
-      if (!data.session) {
-        router.replace('/login')
-      } else {
+      const check = async () => {
+        if (onPublicPath) {
+          setIsPublic(true)
+          setLoading(false)
+          return
+        }
+
+        setIsPublic(false)
+        const { data } = await supabase.auth.getSession()
+        const hasSession = !!data.session
+        setAuthed(hasSession)
+        if (!hasSession && !onSoftPath) {
+          router.replace('/login')
+          return
+        }
         setLoading(false)
       }
-    }
-    check()
-  }, [pathname, router])
+      check()
+      // listen for auth changes to update quickly, but never bounce a user
+      // off a public/soft page (e.g. mid-signup, or the logged-out splash)
+      const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+        setAuthed(!!session)
+        if (!session && !onPublicPath && !onSoftPath) router.replace('/login')
+      })
+      return () => { sub.subscription.unsubscribe() }
+    }, [pathname, router])
 
   if (loading) return <div />
   if (isPublic) return <>{children}</>
   return (
     <>
       {children}
-      <BottomNavBar />
+      {authed && <BottomNavBar />}
     </>
   )
 }

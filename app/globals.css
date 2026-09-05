@@ -5,3 +5,20 @@
 html, body, #root {
   height: 100%;
 }
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  /* "backwards" (not "both") so the animation releases the transform
+     property once it finishes, letting hover:scale-105 take effect */
+  animation: fade-in-up 0.5s ease-out backwards;
+}

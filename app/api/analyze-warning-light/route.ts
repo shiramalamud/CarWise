@@ -102,19 +102,28 @@ export async function POST(req: Request) {
 
     if (!textOutput) textOutput = JSON.stringify(respJson)
 
-    // The model is instructed to return ONLY valid JSON. Attempt to parse the
-    // extracted text as JSON and use its fields. If parsing fails, keep a
-    // graceful fallback.
+    // Gemini often wraps its JSON reply in a markdown code fence, e.g.
+    // "```json\n{...}\n```" — strip that before parsing, or JSON.parse throws
+    // and the raw fenced text used to end up dumped straight into the UI.
+    const fenceMatch = textOutput.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
+    const jsonCandidate = (fenceMatch ? fenceMatch[1] : textOutput).trim()
+
     let parsed: any = null
     try {
-      parsed = JSON.parse(textOutput)
+      parsed = JSON.parse(jsonCandidate)
     } catch (e) {
-      parsed = { label: 'unknown', urgency: 'medium', explanation: textOutput }
+      parsed = null
     }
 
-    const label = parsed.label || 'unknown'
-    const urgency = parsed.urgency || 'medium'
-    const explanation = parsed.explanation || (typeof parsed === 'string' ? parsed : JSON.stringify(parsed))
+    const label = typeof parsed?.label === 'string' && parsed.label.trim()
+      ? parsed.label.trim()
+      : 'Unable to identify'
+    const urgency = typeof parsed?.urgency === 'string' && parsed.urgency.trim()
+      ? parsed.urgency.trim()
+      : 'medium'
+    const explanation = typeof parsed?.explanation === 'string' && parsed.explanation.trim()
+      ? parsed.explanation.trim()
+      : "We couldn't fully analyze this image. Please try again with a clearer photo of the warning light."
 
     return NextResponse.json({ label, urgency, explanation, carId })
   } catch (err: any) {
