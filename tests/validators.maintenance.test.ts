@@ -14,4 +14,9 @@ describe('Maintenance validation', () => {
     const negCost = { type: 'brake', date: new Date().toISOString().slice(0,10), cost: -5 }
     expect(() => maintenanceSchema.parse(negCost)).toThrow()
   })
+
+  it('rejects an empty type', () => {
+    const emptyType = { type: '', date: new Date().toISOString().slice(0,10), cost: 10 }
+    expect(() => maintenanceSchema.parse(emptyType)).toThrow()
+  })
 })

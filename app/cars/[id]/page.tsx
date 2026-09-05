@@ -9,6 +9,7 @@ import { Button, Card, Input, Label, useToast, AlertDialog } from '../../../comp
 import NavBar from '../../../components/NavBar'
 import { CarFront, Trash2, CheckCircle2, AlertTriangle, XCircle, ClipboardCheck, ShieldCheck, Wrench, Camera, FileText } from 'lucide-react'
 import { DateStatus, computeCarHealth } from '../../../lib/carHealth'
+import { SOLD_STATUS_UPDATE } from '../../../lib/utils'
 
 const HEALTH_STYLE = {
   good: { icon: CheckCircle2, iconColor: 'text-emerald-600', textColor: 'text-emerald-800', label: 'All good' },
@@ -241,7 +242,7 @@ export default function CarDetailPage() {
   const markSold = async () => {
     setSoldLoading(true)
     // Soft delete only: UPDATE status, never DELETE the row (keeps maintenance history intact).
-    const { error } = await supabase.from('cars').update({ status: 'sold' }).eq('id', id)
+    const { error } = await supabase.from('cars').update(SOLD_STATUS_UPDATE).eq('id', id)
     setSoldLoading(false)
     setShowSoldDialog(false)
     if (error) {
